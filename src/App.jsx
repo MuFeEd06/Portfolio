@@ -3,8 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 
 // ── SUPABASE CONFIG ────────────────────────────────────────────────────────
 // Replace these with your own project's values (Project Settings → API)
-const SUPABASE_URL = "https://xdwjytmxpguokxhshwzi.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhkd2p5dG14cGd1b2t4aHNod3ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NDc0NTcsImV4cCI6MjA5NzUyMzQ1N30.yeMa6kQ1gTnh8sHv48kSOndCYN0rQK0_0UMrAdmqJc8";
+const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ── THEME ────────────────────────────────────────────────────────────────────
@@ -202,6 +202,92 @@ function Reveal({ children, style }) {
     return()=>ob.disconnect();
   },[]);
   return <div ref={ref} style={{opacity:vis?1:0,transform:vis?"translateY(0)":"translateY(28px)",transition:"opacity .6s ease,transform .6s ease",...style}}>{children}</div>;
+}
+
+// ── SCRAMBLE TEXT ──────────────────────────────────────────────────────────────
+// Plain-JS port of the 21st.dev "SpecialText" effect — no TypeScript, no
+// external `motion` package, no shadcn paths. Two phases:
+//   Phase 1: random glitch characters fill in left-to-right
+//   Phase 2: characters lock into place left-to-right while the rest
+//            keeps glitching, until the full string is revealed
+const SCRAMBLE_CHARS = "_!X$0-+*#";
+
+function getScrambleChar(prevChar) {
+  let c;
+  do { c = SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)]; }
+  while (c === prevChar);
+  return c;
+}
+
+// Renders `text` but lets the caller wrap parts of it (e.g. a colored <span>)
+// by passing children as plain text only — for rich content like the
+// gradient name, ScrambleText is used per-segment (see usage below).
+function ScrambleText({ text, speed = 28, delay = 0, startWhenVisible = true, once = true, style }) {
+  const ref = useRef(null);
+  const [display, setDisplay] = useState(() => "\u00A0".repeat(text.length));
+  const [started, setStarted] = useState(!startWhenVisible && delay <= 0);
+  const phaseRef = useRef("phase1");
+  const stepRef = useRef(0);
+  const intervalRef = useRef(null);
+  const startTORef = useRef(null);
+  const firedRef = useRef(false);
+
+  // Trigger on scroll-into-view (optional)
+  useEffect(() => {
+    if (!startWhenVisible) return;
+    const el = ref.current; if (!el) return;
+    const ob = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && (!once || !firedRef.current)) {
+        firedRef.current = true;
+        if (delay > 0) {
+          startTORef.current = setTimeout(() => setStarted(true), delay * 1000);
+        } else {
+          setStarted(true);
+        }
+        if (once) ob.disconnect();
+      }
+    }, { rootMargin: "-80px" });
+    ob.observe(el);
+    return () => { ob.disconnect(); clearTimeout(startTORef.current); };
+  }, [startWhenVisible, delay, once]);
+
+  // Run the two-phase animation loop once started
+  useEffect(() => {
+    if (!started) return;
+    phaseRef.current = "phase1";
+    stepRef.current = 0;
+    setDisplay("\u00A0".repeat(text.length));
+
+    intervalRef.current = setInterval(() => {
+      if (phaseRef.current === "phase1") {
+        const maxSteps = text.length * 2;
+        const currentLength = Math.min(stepRef.current + 1, text.length);
+        const chars = [];
+        for (let i = 0; i < currentLength; i++) chars.push(getScrambleChar(chars[i - 1]));
+        for (let i = currentLength; i < text.length; i++) chars.push("\u00A0");
+        setDisplay(chars.join(""));
+        if (stepRef.current < maxSteps - 1) stepRef.current += 1;
+        else { phaseRef.current = "phase2"; stepRef.current = 0; }
+      } else {
+        const revealed = Math.floor(stepRef.current / 2);
+        const chars = [];
+        for (let i = 0; i < revealed && i < text.length; i++) chars.push(text[i]);
+        if (revealed < text.length) chars.push(stepRef.current % 2 === 0 ? "_" : getScrambleChar());
+        for (let i = chars.length; i < text.length; i++) chars.push(getScrambleChar());
+        setDisplay(chars.join(""));
+        if (stepRef.current < text.length * 2 - 1) stepRef.current += 1;
+        else { setDisplay(text); clearInterval(intervalRef.current); }
+      }
+    }, speed);
+
+    return () => clearInterval(intervalRef.current);
+  }, [started, text, speed]);
+
+  return (
+    <span ref={ref} style={{ fontFamily:"'Space Grotesk',monospace", display:"inline-block", whiteSpace:"pre", ...style }}>
+      {display}
+    </span>
+  );
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -1194,7 +1280,8 @@ export default function App() {
           <div style={{position:"absolute",inset:16,borderRadius:"50%",overflow:"hidden",border:`3px solid ${T.acc}`,boxShadow:`0 0 40px ${T.glow}`,background:`linear-gradient(135deg,${T.s2},${T.bg})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"3.5rem"}}>🧑‍💻</div>
         </div>
         <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"clamp(2.3rem,5vw,4rem)",fontWeight:900,lineHeight:1.1,margin:"0 0 .5rem",animation:"fadeUp .6s .3s both"}}>
-          Hi, I'm <span style={gradTxt}>{data.name}</span>
+          <ScrambleText key={"greet"} text="Hi, I'm " speed={26} delay={0.1} style={{fontFamily:"'Syne',sans-serif",fontWeight:900,fontSize:"inherit",color:T.txt}} />
+          <ScrambleText key={data.name} text={data.name} speed={26} delay={0.3} style={{...gradTxt,fontFamily:"'Syne',sans-serif",fontWeight:900,fontSize:"inherit"}} />
         </h1>
         <div style={{fontSize:"1.02rem",color:T.acc3,fontWeight:500,marginBottom:"1rem",minHeight:"1.5em",animation:"fadeUp .6s .4s both"}}>
           <span id="typed"/><span style={{animation:"blink .8s infinite",display:"inline-block"}}>|</span>
