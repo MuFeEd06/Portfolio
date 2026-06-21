@@ -2,10 +2,21 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── SUPABASE CONFIG ────────────────────────────────────────────────────────
-// Replace these with your own project's values (Project Settings → API)
-const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Credentials come from environment variables — NEVER hardcode these.
+// Vite only exposes env vars prefixed with VITE_ to the browser bundle.
+// Set these in a local .env file (gitignored) and in Vercel → Project
+// Settings → Environment Variables for production. See README for setup.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error(
+    "Missing Supabase environment variables. Create a .env file with " +
+    "VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see README.md)."
+  );
+}
+
+const supabase = createClient(SUPABASE_URL || "", SUPABASE_ANON_KEY || "");
 
 // ── THEME ────────────────────────────────────────────────────────────────────
 const T = {
@@ -147,7 +158,7 @@ function Particles() {
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 const NAVS = ["home","about","skills","projects","certifications","experience","education","contact"];
-function Nav({ onAdmin, name }) {
+function Nav({ onAdmin, name, isAdmin }) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(()=>{ const h=()=>setScrolled(scrollY>30); window.addEventListener("scroll",h); return()=>window.removeEventListener("scroll",h); },[]);
   const go = id => document.getElementById(id)?.scrollIntoView({behavior:"smooth"});
@@ -162,7 +173,10 @@ function Nav({ onAdmin, name }) {
       <div style={{display:"flex",gap:"1.5rem"}}>
         {NAVS.map(id=><button key={id} onClick={()=>go(id)} style={{background:"none",border:"none",color:T.mut,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",fontSize:".8rem",fontWeight:500,transition:"color .2s"}} onMouseEnter={e=>e.target.style.color=T.acc2} onMouseLeave={e=>e.target.style.color=T.mut}>{id}</button>)}
       </div>
-      <button onClick={onAdmin} style={{background:`linear-gradient(135deg,${T.acc},${T.acc2})`,color:"#fff",border:"none",borderRadius:8,padding:".42rem 1rem",fontSize:".78rem",fontWeight:700,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>⚙ Admin</button>
+      <button onClick={onAdmin} style={{background:`linear-gradient(135deg,${T.acc},${T.acc2})`,color:"#fff",border:"none",borderRadius:8,padding:".42rem 1rem",fontSize:".78rem",fontWeight:700,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",display:"flex",alignItems:"center",gap:".4rem"}}>
+        {isAdmin && <span style={{width:6,height:6,borderRadius:"50%",background:"#4ade80",display:"inline-block"}} title="Signed in" />}
+        ⚙ Admin
+      </button>
     </nav>
   );
 }
@@ -771,7 +785,7 @@ function fileToBase64(file) {
   });
 }
 
-function AdminModal({ data, setData, onClose, showToast }) {
+function AdminModal({ data, setData, onClose, showToast, onSignOut, userEmail }) {
   const [tab, setTab] = useState("Profile");
   const [lvl, setLvl] = useState(75);
   const [editProjIdx, setEditProjIdx] = useState(null); // which project is being edited in detail
@@ -937,12 +951,16 @@ function AdminModal({ data, setData, onClose, showToast }) {
     <div onClick={e=>{if(e.target===e.currentTarget)onClose();}} style={{position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem",backdropFilter:"blur(6px)"}}>
       <div onClick={e=>e.stopPropagation()} style={{background:T.s1,border:`1px solid ${T.brd}`,borderRadius:22,width:"100%",maxWidth:840,maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",animation:"popIn .24s ease"}}>
         {/* Head */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"1.3rem 1.8rem",borderBottom:`1px solid ${T.brd}`}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"1.3rem 1.8rem",borderBottom:`1px solid ${T.brd}`,gap:"1rem",flexWrap:"wrap"}}>
           <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:"1.2rem",fontWeight:800,display:"flex",alignItems:"center",gap:".7rem"}}>
             ⚙ Admin Panel
             {saving && <span style={{fontSize:".7rem",fontWeight:600,color:T.acc2,display:"inline-flex",alignItems:"center",gap:".3rem"}}><span style={{width:6,height:6,borderRadius:"50%",background:T.acc2,display:"inline-block",animation:"pDot 1s infinite"}}/>Saving...</span>}
           </h2>
-          <button onClick={onClose} style={{background:"none",border:"none",color:T.mut,fontSize:"1.5rem",cursor:"pointer"}}>×</button>
+          <div style={{display:"flex",alignItems:"center",gap:".9rem"}}>
+            {userEmail && <span style={{fontSize:".74rem",color:T.mut}}>{userEmail}</span>}
+            <button onClick={onSignOut} style={{background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.25)",color:"#ef4444",borderRadius:6,padding:".3rem .8rem",fontSize:".72rem",fontWeight:600,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>Sign Out</button>
+            <button onClick={onClose} style={{background:"none",border:"none",color:T.mut,fontSize:"1.5rem",cursor:"pointer"}}>×</button>
+          </div>
         </div>
         {/* Tabs */}
         <div style={{display:"flex",overflowX:"auto",borderBottom:`1px solid ${T.brd}`,flexShrink:0}}>
@@ -1162,26 +1180,50 @@ function AdminModal({ data, setData, onClose, showToast }) {
 }
 
 // ── LOGIN MODAL ───────────────────────────────────────────────────────────────
+// ── LOGIN MODAL (Supabase Auth) ───────────────────────────────────────────────
 function LoginModal({ onSuccess, onClose }) {
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
-  const [err, setErr] = useState(false);
-  const submit = () => { pw === "admin123" ? onSuccess() : setErr(true); };
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    if (!email || !pw) { setErr("Enter both email and password."); return; }
+    setLoading(true);
+    setErr("");
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pw });
+    setLoading(false);
+    if (error) {
+      setErr("Invalid email or password.");
+      return;
+    }
+    if (data?.session) onSuccess();
+  };
+
   return (
     <div onClick={e=>{if(e.target===e.currentTarget)onClose();}} style={{position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem",backdropFilter:"blur(6px)"}}>
       <div onClick={e=>e.stopPropagation()} style={{background:T.s1,border:`1px solid ${T.brd}`,borderRadius:22,padding:"2.5rem",width:"100%",maxWidth:380,animation:"popIn .22s ease"}}>
         <h2 style={{fontFamily:"'Syne',sans-serif",textAlign:"center",marginBottom:"1.4rem",fontSize:"1.35rem",fontWeight:800}}>🔐 Admin Login</h2>
         <div style={{marginBottom:"1rem"}}>
-          <label style={{display:"block",fontSize:".78rem",color:T.mut,marginBottom:".35rem"}}>Password</label>
-          <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr(false);}} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Enter admin password"
+          <label style={{display:"block",fontSize:".78rem",color:T.mut,marginBottom:".35rem"}}>Email</label>
+          <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="you@example.com" autoComplete="username"
             style={{width:"100%",background:T.bg,border:`1px solid ${err?"#ef4444":T.brd}`,borderRadius:8,padding:".75rem 1rem",color:T.txt,fontFamily:"'Space Grotesk',sans-serif",fontSize:".9rem",outline:"none"}} />
-          {err && <p style={{color:"#ef4444",fontSize:".78rem",marginTop:".3rem"}}>Incorrect. Try: admin123</p>}
         </div>
-        <button onClick={submit} style={{width:"100%",background:`linear-gradient(135deg,${T.acc},${T.acc2})`,color:"#fff",border:"none",borderRadius:10,padding:".8rem",fontWeight:700,fontSize:".95rem",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",marginBottom:".75rem"}}>Login</button>
+        <div style={{marginBottom:"1rem"}}>
+          <label style={{display:"block",fontSize:".78rem",color:T.mut,marginBottom:".35rem"}}>Password</label>
+          <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Enter your password" autoComplete="current-password"
+            style={{width:"100%",background:T.bg,border:`1px solid ${err?"#ef4444":T.brd}`,borderRadius:8,padding:".75rem 1rem",color:T.txt,fontFamily:"'Space Grotesk',sans-serif",fontSize:".9rem",outline:"none"}} />
+          {err && <p style={{color:"#ef4444",fontSize:".78rem",marginTop:".4rem"}}>{err}</p>}
+        </div>
+        <button onClick={submit} disabled={loading} style={{width:"100%",background:`linear-gradient(135deg,${T.acc},${T.acc2})`,color:"#fff",border:"none",borderRadius:10,padding:".8rem",fontWeight:700,fontSize:".95rem",cursor:loading?"default":"pointer",fontFamily:"'Space Grotesk',sans-serif",marginBottom:".75rem",opacity:loading?.7:1}}>
+          {loading ? "Logging in..." : "Login"}
+        </button>
         <button onClick={onClose} style={{width:"100%",background:"none",border:`1px solid ${T.brd}`,borderRadius:10,padding:".75rem",color:T.mut,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",fontSize:".9rem"}}>Cancel</button>
       </div>
     </div>
   );
 }
+
 
 // ── TOAST ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, show }) {
@@ -1206,6 +1248,7 @@ export default function App() {
   const [loadError, setLoadError] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [session, setSession] = useState(null); // Supabase Auth session, null = signed out
   const [toast, setToast] = useState({ msg:"", show:false });
   const typerRef = useRef(null);
 
@@ -1213,6 +1256,21 @@ export default function App() {
     setToast({ msg, show:true });
     setTimeout(() => setToast(t=>({...t,show:false})), 2500);
   }, []);
+
+  // Track Supabase Auth session — fires on load and on every sign-in/out
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => {
+      setSession(sess);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setShowAdmin(false);
+    showToast("Signed out");
+  };
 
   // Load portfolio data from Supabase on mount
   useEffect(() => {
@@ -1266,7 +1324,7 @@ export default function App() {
   return (
     <div style={{background:T.bg,color:T.txt,minHeight:"100vh"}}>
       <Particles />
-      <Nav onAdmin={()=>setShowLogin(true)} name={data.name} />
+      <Nav onAdmin={()=>session ? setShowAdmin(true) : setShowLogin(true)} name={data.name} isAdmin={!!session} />
 
       {/* ── HERO ── */}
       <section id="home" style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"8rem 2rem 4rem",position:"relative",zIndex:1}}>
@@ -1467,8 +1525,8 @@ export default function App() {
       <BackTop />
       <Toast msg={toast.msg} show={toast.show} />
 
-      {showLogin && <LoginModal onSuccess={()=>{setShowLogin(false);setShowAdmin(true);}} onClose={()=>setShowLogin(false)} />}
-      {showAdmin && <AdminModal data={data} setData={setData} onClose={()=>setShowAdmin(false)} showToast={showToast} />}
+      {showLogin && !session && <LoginModal onSuccess={()=>{setShowLogin(false);setShowAdmin(true);}} onClose={()=>setShowLogin(false)} />}
+      {showAdmin && session && <AdminModal data={data} setData={setData} onClose={()=>setShowAdmin(false)} showToast={showToast} onSignOut={signOut} userEmail={session.user?.email} />}
     </div>
   );
 }
