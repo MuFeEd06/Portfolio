@@ -26,6 +26,34 @@ const T = {
   brd: "rgba(124,106,247,0.14)", glow: "rgba(124,106,247,0.22)",
 };
 
+// ── RESPONSIVE BREAKPOINTS ────────────────────────────────────────────────────
+// Since the whole site uses inline style={{}} objects (no separate CSS file,
+// so no real @media queries are possible), components read live viewport
+// width via these hooks and branch their style objects accordingly.
+const MOBILE_BP = 720;  // phones + small tablets — collapse nav, stack grids
+const SMALL_BP   = 420;  // very narrow phones — tighten further
+
+function useViewport() {
+  const [w, setW] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1200));
+  useEffect(() => {
+    let raf = null;
+    const onResize = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { setW(window.innerWidth); raf = null; });
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+  return w;
+}
+const useIsMobile = () => useViewport() <= MOBILE_BP;
+const useIsSmall  = () => useViewport() <= SMALL_BP;
+
 // ── DEFAULT DATA ──────────────────────────────────────────────────────────────
 const DEFAULT = {
   name: "Mufeed T",
@@ -33,6 +61,8 @@ const DEFAULT = {
   desc: "Transforming raw data into actionable insights. Skilled in Python, SQL, Excel and Power BI. Let's turn your data into decisions.",
   about: "I'm a B.Tech Artificial Intelligence and data science student at EASA COLLEGE OF ENGINEERING, AnnaUniversity, passionate about transforming raw data into meaningful insights. With a strong academic background and hands-on knowledge of data tools, I'm ready to contribute and grow in a dynamic tech environment.",
   goal: "Seeking a challenging and rewarding opportunity in a progressive organization where I can utilize my technical expertise, innovative thinking, and collaborative spirit to drive business growth, enhance my skills, and achieve professional excellence.",
+  availabilityText: "Available for Internship", // hero badge text — editable in admin
+  photo: "", // profile photo (base64 or URL) — shown in the hero circle; falls back to emoji if empty
   infoCards: [
     { label: "Full Name", val: "Mufeed T" },
     { label: "Date of Birth", val: "09 Nov 2002" },
@@ -160,24 +190,68 @@ function Particles() {
 const NAVS = ["home","about","skills","projects","certifications","experience","education","contact"];
 function Nav({ onAdmin, name, isAdmin }) {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
   useEffect(()=>{ const h=()=>setScrolled(scrollY>30); window.addEventListener("scroll",h); return()=>window.removeEventListener("scroll",h); },[]);
-  const go = id => document.getElementById(id)?.scrollIntoView({behavior:"smooth"});
-  // Derive initials dynamically from the name, e.g. "Mufeed T" → "M.T"
-  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
-  const initials = parts.length >= 2
-    ? [parts[0][0], parts[parts.length - 1][0]]
-    : [(parts[0] || "?")[0], (parts[0] || "?")[1] || ""];
+  useEffect(()=>{ if(!isMobile) setMenuOpen(false); },[isMobile]);
+  const go = id => { document.getElementById(id)?.scrollIntoView({behavior:"smooth"}); setMenuOpen(false); };
+
   return (
-    <nav style={{position:"fixed",top:0,left:0,right:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"space-between",padding:".9rem 2.2rem",background:scrolled?"rgba(5,5,9,.92)":"transparent",backdropFilter:scrolled?"blur(14px)":"none",borderBottom:`1px solid ${scrolled?T.brd:"transparent"}`,transition:"all .3s"}}>
-      <div onClick={()=>go("home")} style={{fontFamily:"'Syne',sans-serif",fontSize:"1.55rem",fontWeight:900,cursor:"pointer",background:`linear-gradient(135deg,${T.acc},${T.acc2})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{initials[0]}<span style={{opacity:.65}}>.</span>{initials[1]}</div>
-      <div style={{display:"flex",gap:"1.5rem"}}>
-        {NAVS.map(id=><button key={id} onClick={()=>go(id)} style={{background:"none",border:"none",color:T.mut,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",fontSize:".8rem",fontWeight:500,transition:"color .2s"}} onMouseEnter={e=>e.target.style.color=T.acc2} onMouseLeave={e=>e.target.style.color=T.mut}>{id}</button>)}
-      </div>
-      <button onClick={onAdmin} style={{background:`linear-gradient(135deg,${T.acc},${T.acc2})`,color:"#fff",border:"none",borderRadius:8,padding:".42rem 1rem",fontSize:".78rem",fontWeight:700,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",display:"flex",alignItems:"center",gap:".4rem"}}>
-        {isAdmin && <span style={{width:6,height:6,borderRadius:"50%",background:"#4ade80",display:"inline-block"}} title="Signed in" />}
-        ⚙ Admin
-      </button>
-    </nav>
+    <>
+      <nav style={{position:"fixed",top:0,left:0,right:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"space-between",padding:isMobile?".8rem 1.1rem":".9rem 2.2rem",background:(scrolled||menuOpen)?"rgba(5,5,9,.94)":"transparent",backdropFilter:(scrolled||menuOpen)?"blur(14px)":"none",borderBottom:`1px solid ${(scrolled||menuOpen)?T.brd:"transparent"}`,transition:"all .3s"}}>
+        {/* Invisible spacer keeps the center nav links visually centered on desktop now that the logo is removed. Hidden on mobile so the hamburger can sit flush left. */}
+        {!isMobile && <div style={{width:90,flexShrink:0}} aria-hidden="true" />}
+
+        {isMobile ? (
+          // Hamburger toggle replaces the full link row on small screens
+          <button onClick={()=>setMenuOpen(o=>!o)} aria-label="Toggle navigation menu"
+            style={{background:"none",border:`1px solid ${T.brd}`,borderRadius:8,width:38,height:38,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+            <div style={{width:18,height:13,position:"relative"}}>
+              {[0,1,2].map(i=>(
+                <span key={i} style={{position:"absolute",left:0,right:0,height:2,background:T.txt,borderRadius:1,top:i*5.5,
+                  transform: menuOpen ? (i===0?"translateY(5.5px) rotate(45deg)":i===2?"translateY(-5.5px) rotate(-45deg)":"scaleX(0)") : "none",
+                  opacity: menuOpen && i===1 ? 0 : 1, transition:"transform .25s ease, opacity .2s ease"}} />
+              ))}
+            </div>
+          </button>
+        ) : (
+          <div style={{display:"flex",gap:"1.5rem"}}>
+            {NAVS.map(id=><button key={id} onClick={()=>go(id)} style={{background:"none",border:"none",color:T.mut,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",fontSize:".8rem",fontWeight:500,transition:"color .2s"}} onMouseEnter={e=>e.target.style.color=T.acc2} onMouseLeave={e=>e.target.style.color=T.mut}>{id}</button>)}
+          </div>
+        )}
+
+        <button onClick={onAdmin} style={{background:`linear-gradient(135deg,${T.acc},${T.acc2})`,color:"#fff",border:"none",borderRadius:8,padding:isMobile?".42rem .8rem":".42rem 1rem",fontSize:isMobile?".72rem":".78rem",fontWeight:700,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",display:"flex",alignItems:"center",gap:".4rem",flexShrink:0}}>
+          {isAdmin && <span style={{width:6,height:6,borderRadius:"50%",background:"#4ade80",display:"inline-block"}} title="Signed in" />}
+          ⚙ Admin
+        </button>
+      </nav>
+
+      {/* Mobile slide-down menu */}
+      {isMobile && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, zIndex:99,
+          background:"rgba(5,5,9,.97)", backdropFilter:"blur(16px)",
+          borderBottom:`1px solid ${T.brd}`,
+          maxHeight: menuOpen ? "min(80vh,560px)" : 0,
+          overflow:"hidden",
+          transition:"max-height .35s cubic-bezier(.22,1,.36,1)",
+          paddingTop: menuOpen ? "4.2rem" : 0,
+        }}>
+          <div style={{display:"flex",flexDirection:"column",padding:"0 1.1rem 1.2rem"}}>
+            {NAVS.map(id=>(
+              <button key={id} onClick={()=>go(id)} style={{
+                background:"none", border:"none", borderBottom:`1px solid ${T.brd}`,
+                color:T.txt, cursor:"pointer", textAlign:"left",
+                fontFamily:"'Space Grotesk',sans-serif", fontSize:"1rem", fontWeight:600,
+                textTransform:"capitalize", padding:"1rem .2rem",
+              }}>
+                {id}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -396,6 +470,7 @@ function MediaSwiper({ video, shots }) {
 // ── PROJECT DETAIL POPUP ──────────────────────────────────────────────────────
 function ProjectPopup({ project, onClose }) {
   const ref = useRef(null);
+  const isMobile = useIsMobile();
   // Close on backdrop click
   const onBdClick = e => { if(e.target===ref.current) onClose(); };
   // Close on Escape
@@ -404,21 +479,21 @@ function ProjectPopup({ project, onClose }) {
   useEffect(()=>{ document.body.style.overflow="hidden"; return()=>{ document.body.style.overflow=""; }; },[]);
 
   return (
-    <div ref={ref} onClick={onBdClick} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.82)",display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem",backdropFilter:"blur(8px)"}}>
-      <div style={{background:T.s1,border:`1px solid ${T.brd}`,borderRadius:22,width:"100%",maxWidth:520,maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",animation:"popIn .25s cubic-bezier(.22,1,.36,1)"}}>
+    <div ref={ref} onClick={onBdClick} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.82)",display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?0:"1rem",backdropFilter:"blur(8px)"}}>
+      <div style={{background:T.s1,border:`1px solid ${T.brd}`,borderRadius:isMobile?"22px 22px 0 0":22,width:"100%",maxWidth:520,maxHeight:isMobile?"92vh":"90vh",overflow:"hidden",display:"flex",flexDirection:"column",animation:isMobile?"slideUp .28s cubic-bezier(.22,1,.36,1)":"popIn .25s cubic-bezier(.22,1,.36,1)"}}>
         {/* Header bar */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"1rem 1.4rem",borderBottom:`1px solid ${T.brd}`,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:isMobile?".9rem 1.1rem":"1rem 1.4rem",borderBottom:`1px solid ${T.brd}`,flexShrink:0}}>
           <span style={{fontSize:".68rem",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:T.acc2}}>{project.tag}</span>
-          <button onClick={onClose} style={{background:"none",border:"none",color:T.mut,fontSize:"1.5rem",cursor:"pointer",lineHeight:1,padding:"0 .2rem"}}>×</button>
+          <button onClick={onClose} style={{background:"none",border:"none",color:T.mut,fontSize:"1.6rem",cursor:"pointer",lineHeight:1,padding:".3rem .5rem",minWidth:36,minHeight:36}}>×</button>
         </div>
         {/* Scrollable body */}
-        <div style={{overflowY:"auto",padding:"1.4rem",flex:1}}>
+        <div style={{overflowY:"auto",padding:isMobile?"1.1rem":"1.4rem",flex:1}}>
           {/* Media swiper: demo video first (if present), then screenshots */}
           <MediaSwiper video={project.video} shots={project.screenshots || []} />
           {/* Project name */}
-          <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:"1.2rem",margin:"0 0 .6rem"}}>{project.name}</h2>
+          <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:isMobile?"1.05rem":"1.2rem",margin:"0 0 .6rem"}}>{project.name}</h2>
           {/* Description */}
-          <p style={{color:T.mut,fontSize:".9rem",lineHeight:1.75,margin:"0 0 1.4rem"}}>{project.desc}</p>
+          <p style={{color:T.mut,fontSize:isMobile?".85rem":".9rem",lineHeight:1.75,margin:"0 0 1.4rem"}}>{project.desc}</p>
           {/* GitHub link */}
           {project.url && (
             <a href={project.url} target="_blank" rel="noreferrer"
@@ -455,10 +530,14 @@ const WAVE_SPEED = 0.55; // radians per second
 const WAVE_PHASE = 1.1;  // phase offset between adjacent cards (rad)
 
 function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
+  const isMobile = useIsMobile();
+  const cardW = isMobile ? 210 : CARD_W;
+  const cardH = isMobile ? 260 : CARD_H;
+  const gap   = isMobile ? 240 : GAP;
+
   const TOTAL      = Math.max(projects.length, 1);
-  // More buffer cards when there are few projects, so the loop always
-  // feels populated edge-to-edge and wraps seamlessly off-screen.
-  const EXTRA      = Math.max(6, Math.ceil(10 / TOTAL) * TOTAL);
+  // Generous buffer so momentum/snap never outruns the rendered card range.
+  const EXTRA      = Math.max(8, Math.ceil(14 / TOTAL) * TOTAL);
   const CARD_COUNT = TOTAL + EXTRA * 2;
 
   // offset = fractional card index; drives X placement
@@ -471,29 +550,31 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
   const [popup,   setPopup]   = useState(null);
 
   const isDragging    = useRef(false);
-  const userInteract  = useRef(false); // true while user is actively dragging
-  const interactTimer = useRef(null);  // resume auto after idle
+  const userInteract  = useRef(false); // true while the user is actively controlling the carousel
+  const dragAccum     = useRef(0);     // total drag distance (in card units) since pointer-down
   const lastX         = useRef(0);
-  const lastDelta     = useRef(0);
   const mouseDownPos  = useRef({ x: 0, y: 0 });
   const rafRef        = useRef(null);
   const containerRef  = useRef(null);
 
   // ── MAIN RAF LOOP ──────────────────────────────────────────────────────────
   const loop = useCallback((ts) => {
-    // Delta time in seconds
     if (lastTs.current === null) lastTs.current = ts;
     const dt = Math.min((ts - lastTs.current) / 1000, 0.1);
     lastTs.current = ts;
 
-    // Auto-scroll drift (paused while user interacts) — applied once to target
+    // Auto-scroll drift — only runs when the user is NOT interacting.
+    // This creates the "infinite loop when idle" behaviour.
     if (!userInteract.current && autoScrollSpeed > 0) {
       targetOffset.current += autoScrollSpeed * dt;
     }
 
-    // Ease currentOffset → targetOffset
+    // Ease currentOffset → targetOffset (snappier easing while the user is
+    // actively dragging so it tracks the pointer closely; same easing
+    // handles the final settle-into-place after release too).
     const diff = targetOffset.current - currentOffset.current;
-    currentOffset.current += diff * Math.min(1, 8 * dt);
+    const easeRate = userInteract.current ? 14 : 8;
+    currentOffset.current += diff * Math.min(1, easeRate * dt);
 
     // Keep offsets bounded to avoid float drift over long sessions —
     // wrap both by TOTAL once they exceed a few cycles. Since position is
@@ -505,7 +586,6 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
       targetOffset.current  -= wrap;
     }
 
-    // Wave time
     setWaveT(ts / 1000);
     setOffset(currentOffset.current);
 
@@ -517,40 +597,52 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
     return () => cancelAnimationFrame(rafRef.current);
   }, [loop]);
 
-  // After user stops interacting, auto-scroll resumes from current target —
-  // no realignment needed since auto-scroll drives targetOffset directly.
-  const resumeAuto = useCallback(() => {
-    userInteract.current = false;
+  // Called the instant the user starts touching/dragging/scrolling —
+  // pauses auto-scroll immediately.
+  const beginInteract = useCallback(() => {
+    userInteract.current = true;
   }, []);
 
-  const markInteract = useCallback(() => {
-    userInteract.current = true;
-    clearTimeout(interactTimer.current);
-    interactTimer.current = setTimeout(resumeAuto, 1200);
-  }, [resumeAuto]);
+  // Called when the user finishes a gesture (release/touchend/wheel-settle).
+  // Snaps to the nearest whole card, THEN — after the snap completes and a
+  // short idle delay — hands control back to auto-scroll. This satisfies
+  // "stop at last card" for both directions while still resuming the loop
+  // once the user is done.
+  const endInteractAndSnap = useCallback(() => {
+    targetOffset.current = Math.round(targetOffset.current);
+    // Give the snap a moment to visually settle before auto-scroll resumes,
+    // so it doesn't feel like the carousel yanks away immediately.
+    clearTimeout(endInteractAndSnap._t);
+    endInteractAndSnap._t = setTimeout(() => { userInteract.current = false; }, 700);
+  }, []);
 
+  // Live nudge while actively dragging/wheeling (no snapping mid-gesture).
   const nudge = useCallback((delta) => {
-    markInteract();
+    beginInteract();
     targetOffset.current += delta;
-  }, [markInteract]);
+  }, [beginInteract]);
 
   // ── WHEEL — horizontal axis only, NEVER trap vertical ─────────────────────
   useEffect(() => {
     const el = containerRef.current; if (!el) return;
+    let settleTimer = null;
     const onWheel = e => {
-      // Use deltaX for trackpad horizontal swipe; deltaY only if shift held
       const horiz = Math.abs(e.deltaX) > Math.abs(e.deltaY)
         ? e.deltaX
         : (e.shiftKey ? e.deltaY : 0);
       if (horiz !== 0) {
         e.preventDefault();
         nudge(horiz / 320);
+        // Debounce: once wheel events stop firing for a moment, treat the
+        // gesture as finished and snap to the nearest card.
+        clearTimeout(settleTimer);
+        settleTimer = setTimeout(endInteractAndSnap, 150);
       }
       // Pure vertical scroll passes through naturally
     };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [nudge]);
+    return () => { el.removeEventListener("wheel", onWheel); clearTimeout(settleTimer); };
+  }, [nudge, endInteractAndSnap]);
 
   // ── TOUCH — horizontal swipe only, vertical scrolls page ──────────────────
   useEffect(() => {
@@ -562,7 +654,6 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
       startY = e.touches[0].clientY;
       lastX.current = startX;
       decided = false; isHoriz = false;
-      lastDelta.current = 0;
     };
     const onTM = e => {
       const dx = e.touches[0].clientX - startX;
@@ -576,13 +667,10 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
       e.preventDefault();
       const ddx = e.touches[0].clientX - lastX.current;
       lastX.current = e.touches[0].clientX;
-      lastDelta.current = -ddx / 280;
-      nudge(lastDelta.current);
+      nudge(-ddx / gap);
     };
     const onTE = () => {
-      if (isHoriz) {
-        nudge(lastDelta.current * 5); // momentum
-      }
+      if (isHoriz) endInteractAndSnap(); // stop cleanly at the nearest card, no momentum overshoot
     };
     el.addEventListener("touchstart", onTS, { passive: true });
     el.addEventListener("touchmove",  onTM, { passive: false });
@@ -592,7 +680,7 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
       el.removeEventListener("touchmove",  onTM);
       el.removeEventListener("touchend",   onTE);
     };
-  }, [nudge]);
+  }, [nudge, endInteractAndSnap]);
 
   // ── MOUSE DRAG ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -601,15 +689,16 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
       isDragging.current = true;
       lastX.current = e.clientX;
       mouseDownPos.current = { x: e.clientX, y: e.clientY };
-      lastDelta.current = 0;
+      dragAccum.current = 0;
       el.style.cursor = "grabbing";
     };
     const onMM = e => {
       if (!isDragging.current) return;
       const dx = e.clientX - lastX.current;
       lastX.current = e.clientX;
-      lastDelta.current = -dx / 280;
-      nudge(lastDelta.current);
+      const delta = -dx / 280;
+      dragAccum.current += delta;
+      nudge(delta);
     };
     const onMU = e => {
       if (!isDragging.current) return;
@@ -625,7 +714,9 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
         })).reduce((a, b) => Math.abs(a.rel) < Math.abs(b.rel) ? a : b);
         if (best && Math.abs(best.rel) < 1.5 && best.proj) setPopup(best.proj);
       } else {
-        nudge(lastDelta.current * 4);
+        // Stop cleanly at the nearest card — no momentum/overshoot, satisfying
+        // "carousel stops at last card" for both drag directions.
+        endInteractAndSnap();
       }
     };
     el.addEventListener("mousedown", onMD);
@@ -636,17 +727,17 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
       window.removeEventListener("mousemove", onMM);
       window.removeEventListener("mouseup",   onMU);
     };
-  }, [nudge, projects, TOTAL, CARD_COUNT, EXTRA]);
+  }, [nudge, endInteractAndSnap, projects, TOTAL, CARD_COUNT, EXTRA]);
 
   // ── KEYBOARD ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = e => {
-      if (e.key === "ArrowRight") nudge(1);
-      else if (e.key === "ArrowLeft")  nudge(-1);
+      if (e.key === "ArrowRight") { nudge(1); endInteractAndSnap(); }
+      else if (e.key === "ArrowLeft")  { nudge(-1); endInteractAndSnap(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [nudge]);
+  }, [nudge, endInteractAndSnap]);
 
   // ── BUILD CARD LIST ────────────────────────────────────────────────────────
   const center = EXTRA + Math.floor(TOTAL / 2);
@@ -664,7 +755,7 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
     const dist  = Math.abs(rel);
 
     // ── Horizontal position only ──────────────────────────────────────────
-    const x = rel * GAP;
+    const x = rel * gap;
 
     // ── Wave: each card floats on a sine wave with its own phase ──────────
     // waveT is real time in seconds
@@ -692,7 +783,7 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
       <div
         ref={containerRef}
         style={{
-          width:"100%", height:"100vh", background:"#000",
+          width:"100%", height:isMobile?"85vh":"100vh", background:"#000",
           overflow:"hidden", position:"relative",
           cursor:"grab", userSelect:"none",
           // CRITICAL: do NOT set touchAction:"none" — let vertical scroll pass through
@@ -700,17 +791,17 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
         }}
       >
         {/* Top-left title */}
-        <div style={{position:"absolute",zIndex:50,top:"3vw",left:"3vw",fontFamily:"system-ui,sans-serif",pointerEvents:"none"}}>
-          <div style={{color:"#fff",lineHeight:.9,fontWeight:300,fontSize:"clamp(16px,2.8vw,44px)",letterSpacing:"-.02em",marginLeft:"2.5vw",opacity:.5}}>MY</div>
-          <div style={{color:"#fff",lineHeight:.9,fontWeight:500,fontSize:"clamp(22px,4vw,58px)",letterSpacing:"-.02em"}}>
+        <div style={{position:"absolute",zIndex:50,top:isMobile?"6vw":"3vw",left:isMobile?"5vw":"3vw",fontFamily:"system-ui,sans-serif",pointerEvents:"none"}}>
+          <div style={{color:"#fff",lineHeight:.9,fontWeight:300,fontSize:isMobile?"14px":"clamp(16px,2.8vw,44px)",letterSpacing:"-.02em",marginLeft:isMobile?"3vw":"2.5vw",opacity:.5}}>MY</div>
+          <div style={{color:"#fff",lineHeight:.9,fontWeight:500,fontSize:isMobile?"30px":"clamp(22px,4vw,58px)",letterSpacing:"-.02em"}}>
             PROJECTS
             <sup style={{fontSize:".35em",marginLeft:4,position:"relative",top:".65em",verticalAlign:"top",fontWeight:600}}>({projects.length})</sup>
           </div>
         </div>
 
-        {/* Bottom-right hint */}
-        <div style={{position:"absolute",zIndex:50,bottom:"3vw",right:"3vw",fontFamily:"monospace",fontSize:10,letterSpacing:".06em",color:"rgba(255,255,255,.5)",textTransform:"uppercase",pointerEvents:"none"}}>
-          ← drag / swipe → · tap to open
+        {/* Bottom hint — stacked smaller on mobile so it doesn't crowd the edge */}
+        <div style={{position:"absolute",zIndex:50,bottom:isMobile?"4vw":"3vw",right:isMobile?"5vw":"3vw",fontFamily:"monospace",fontSize:isMobile?8.5:10,letterSpacing:".06em",color:"rgba(255,255,255,.5)",textTransform:"uppercase",pointerEvents:"none",textAlign:"right"}}>
+          {isMobile ? "swipe · tap to open" : "← drag / swipe → · tap to open"}
         </div>
 
         {/* 3D scene — flat perspective (no Z stacking, purely 2D wave) */}
@@ -724,9 +815,9 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
               <div
                 key={i}
                 style={{
-                  width: CARD_W, height: CARD_H,
+                  width: cardW, height: cardH,
                   position:"absolute",
-                  left: -CARD_W / 2, top: -CARD_H / 2,
+                  left: -cardW / 2, top: -cardH / 2,
                   transform,
                   filter:`brightness(${brightness})`,
                   // Smooth the brightness/scale but NOT the wave or position (RAF handles that)
@@ -742,17 +833,17 @@ function ProjectsSurfer({ projects, autoScrollSpeed = 0.4 }) {
                 {proj?.thumb
                   ? <img src={proj.thumb} alt={proj?.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} loading="lazy" />
                   : (
-                    <div style={{width:"100%",height:"100%",background:GRADS[i % GRADS.length],display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:".8rem",padding:"1rem"}}>
-                      <span style={{fontSize:"3rem"}}>{proj?.icon || "📁"}</span>
-                      <span style={{color:"rgba(255,255,255,.92)",fontWeight:700,fontSize:".88rem",textAlign:"center",fontFamily:"'Space Grotesk',sans-serif",lineHeight:1.35}}>{proj?.name}</span>
-                      <span style={{color:"rgba(255,255,255,.55)",fontSize:".68rem",letterSpacing:".1em",textTransform:"uppercase"}}>{proj?.tag}</span>
+                    <div style={{width:"100%",height:"100%",background:GRADS[i % GRADS.length],display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:isMobile?".5rem":".8rem",padding:"1rem"}}>
+                      <span style={{fontSize:isMobile?"2.2rem":"3rem"}}>{proj?.icon || "📁"}</span>
+                      <span style={{color:"rgba(255,255,255,.92)",fontWeight:700,fontSize:isMobile?".78rem":".88rem",textAlign:"center",fontFamily:"'Space Grotesk',sans-serif",lineHeight:1.35}}>{proj?.name}</span>
+                      <span style={{color:"rgba(255,255,255,.55)",fontSize:isMobile?".62rem":".68rem",letterSpacing:".1em",textTransform:"uppercase"}}>{proj?.tag}</span>
                     </div>
                   )
                 }
 
                 {/* "Tap" badge on the front-most card */}
                 {isCenter && (
-                  <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",background:"rgba(124,106,247,.88)",color:"#fff",fontSize:".66rem",padding:"4px 14px",borderRadius:20,fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,whiteSpace:"nowrap",backdropFilter:"blur(6px)",boxShadow:"0 2px 12px rgba(124,106,247,.5)"}}>
+                  <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",background:"rgba(124,106,247,.88)",color:"#fff",fontSize:isMobile?".6rem":".66rem",padding:isMobile?"3px 10px":"4px 14px",borderRadius:20,fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,whiteSpace:"nowrap",backdropFilter:"blur(6px)",boxShadow:"0 2px 12px rgba(124,106,247,.5)"}}>
                     Tap to view details
                   </div>
                 )}
@@ -798,6 +889,7 @@ function AdminModal({ data, setData, onClose, showToast, onSignOut, userEmail })
   useEffect(()=>{
     sv("name",data.name); sv("role",data.role); sv("desc",data.desc);
     sv("about",data.about); sv("goal",data.goal); sv("resumeUrl",data.resumeUrl||"");
+    sv("availabilityText",data.availabilityText||"");
   },[]);
 
   const commit = async patch => {
@@ -814,7 +906,22 @@ function AdminModal({ data, setData, onClose, showToast, onSignOut, userEmail })
   const removeItem = (key, i) => commit({[key]:data[key].filter((_,x)=>x!==i)});
 
   // Profile saves
-  const saveProfile = () => commit({name:gv("name")||data.name,role:gv("role")||data.role,desc:gv("desc")||data.desc,about:gv("about")||data.about,goal:gv("goal")||data.goal});
+  const saveProfile = () => commit({name:gv("name")||data.name,role:gv("role")||data.role,desc:gv("desc")||data.desc,about:gv("about")||data.about,goal:gv("goal")||data.goal,availabilityText:gv("availabilityText")||data.availabilityText});
+
+  // Profile photo: upload (base64) or remove
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const uploadPhoto = async (file) => {
+    if (!file.type.startsWith("image/")) { showToast("⚠️ Please choose an image file"); return; }
+    setPhotoUploading(true);
+    try {
+      const b64 = await fileToBase64(file);
+      await commit({ photo: b64 });
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+  const removePhoto = () => commit({ photo: "" });
+
   const addIC = () => { const l=gv("ic_l"),v=gv("ic_v"); if(!l||!v) return; addItem("infoCards",{label:l,val:v},["ic_l","ic_v"]); };
   const addStat = () => { const n=gv("st_n"),l=gv("st_l"); if(!n||!l) return; addItem("stats",{num:n,label:l},["st_n","st_l"]); };
   const addSocial = () => { const i=gv("sl_i"),u=gv("sl_u"),l=gv("sl_l"); if(!i||!u) return; addItem("socials",{icon:i,url:u,label:l||i},["sl_i","sl_u","sl_l"]); };
@@ -974,9 +1081,30 @@ function AdminModal({ data, setData, onClose, showToast, onSignOut, userEmail })
             <div style={S.stitle}>Hero / Profile</div>
             <Row2><Fg label="Full Name"><Inp id="name" ph="Mufeed T"/></Fg><Fg label="Role / Title"><Inp id="role" ph="Data Analytics & Tech Professional"/></Fg></Row2>
             <Fg label="Hero Description"><Ta id="desc" ph="Short hero intro..." rows={2}/></Fg>
+            <Fg label="Availability Badge Text"><Inp id="availabilityText" ph="Available for Internship"/></Fg>
             <Fg label="About Me Paragraph"><Ta id="about" ph="Longer about text..." rows={3}/></Fg>
             <Fg label="Career Objective"><Ta id="goal" ph="Career objective..." rows={2}/></Fg>
             <button style={S.saveBtn} onClick={saveProfile}>💾 Save Profile</button>
+
+            <div style={S.stitle}>Profile Photo</div>
+            <div style={{background:T.bg,border:`1px solid ${T.brd}`,borderRadius:12,padding:"1rem 1.2rem"}}>
+              <div style={{display:"flex",gap:"1rem",alignItems:"center"}}>
+                <div style={{width:72,height:72,borderRadius:"50%",overflow:"hidden",border:`2px solid ${T.brd}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:T.s2,fontSize:"1.8rem"}}>
+                  {data.photo ? <img src={data.photo} alt="profile" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : "🧑‍💻"}
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",gap:".6rem",flexWrap:"wrap",marginBottom:".4rem"}}>
+                    <label style={{cursor:"pointer"}}>
+                      <span style={S.smallBtn}>{photoUploading ? "Uploading..." : "📁 Upload photo"}</span>
+                      <input type="file" accept="image/*" style={{display:"none"}} disabled={photoUploading} onChange={e=>{if(e.target.files[0])uploadPhoto(e.target.files[0]);}} />
+                    </label>
+                    {data.photo && <button style={S.del} onClick={removePhoto}>Remove photo</button>}
+                  </div>
+                  <div style={{fontSize:".7rem",color:T.mut}}>Shown inside the hero circle. Falls back to the default emoji if removed. Square images work best.</div>
+                </div>
+              </div>
+            </div>
+
             <div style={S.stitle}>Info Cards</div>
             <AList items={data.infoCards} lFn={c=>`<b>${c.label}</b>: ${c.val}`} dFn={i=>removeItem("infoCards",i)} />
             <Row2><Fg label="Label"><Inp id="ic_l" ph="Date of Birth"/></Fg><Fg label="Value"><Inp id="ic_v" ph="10 Dec 2006"/></Fg></Row2>
@@ -1251,6 +1379,8 @@ export default function App() {
   const [session, setSession] = useState(null); // Supabase Auth session, null = signed out
   const [toast, setToast] = useState({ msg:"", show:false });
   const typerRef = useRef(null);
+  const isMobile = useIsMobile();
+  const isSmall  = useIsSmall();
 
   const showToast = useCallback(msg => {
     setToast({ msg, show:true });
@@ -1290,7 +1420,7 @@ export default function App() {
     document.head.appendChild(l);
     document.body.style.cssText="background:#050509;color:#e8e6ff;font-family:'Space Grotesk',sans-serif;margin:0;overflow-x:hidden";
     const style=document.createElement("style");
-    style.textContent="@keyframes popIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}} @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}} @keyframes blink{0%,100%{opacity:1}50%{opacity:0}} @keyframes pDot{0%,100%{opacity:1}50%{opacity:.3}} @keyframes sCW{to{transform:rotate(360deg)}} @keyframes sCCW{to{transform:rotate(-360deg)}} @keyframes sBounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(8px)}} ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#7c6af7;border-radius:4px}";
+    style.textContent="@keyframes popIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}} @keyframes slideUp{from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:translateY(0)}} @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}} @keyframes blink{0%,100%{opacity:1}50%{opacity:0}} @keyframes pDot{0%,100%{opacity:1}50%{opacity:.3}} @keyframes sCW{to{transform:rotate(360deg)}} @keyframes sCCW{to{transform:rotate(-360deg)}} @keyframes sBounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(8px)}} ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#7c6af7;border-radius:4px} html{-webkit-text-size-adjust:100%;touch-action:manipulation;} body{overscroll-behavior-y:none;}";
     document.head.appendChild(style);
   },[]);
 
@@ -1330,57 +1460,61 @@ export default function App() {
       <section id="home" style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"8rem 2rem 4rem",position:"relative",zIndex:1}}>
         <div style={{display:"inline-flex",alignItems:"center",gap:".5rem",background:"rgba(124,106,247,.1)",border:`1px solid ${T.brd}`,borderRadius:50,padding:".32rem 1rem",fontSize:".77rem",color:T.acc2,marginBottom:"2rem",animation:"fadeUp .6s .1s both"}}>
           <span style={{width:8,height:8,borderRadius:"50%",background:"#4ade80",display:"inline-block",animation:"pDot 2s infinite"}}/>
-          Available for Internship
+          {data.availabilityText || "Available for Internship"}
         </div>
-        <div style={{position:"relative",width:185,height:185,margin:"0 auto 2rem",animation:"fadeUp .6s .2s both"}}>
+        <div style={{position:"relative",width:isMobile?140:185,height:isMobile?140:185,margin:"0 auto 1.6rem",animation:"fadeUp .6s .2s both"}}>
           <div style={{position:"absolute",inset:0,borderRadius:"50%",border:"2px solid transparent",borderTopColor:T.acc,borderRightColor:T.acc2,animation:"sCW 4s linear infinite"}}/>
           <div style={{position:"absolute",inset:10,borderRadius:"50%",border:"1.5px solid transparent",borderBottomColor:T.acc3,animation:"sCCW 7s linear infinite"}}/>
-          <div style={{position:"absolute",inset:16,borderRadius:"50%",overflow:"hidden",border:`3px solid ${T.acc}`,boxShadow:`0 0 40px ${T.glow}`,background:`linear-gradient(135deg,${T.s2},${T.bg})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"3.5rem"}}>🧑‍💻</div>
+          <div style={{position:"absolute",inset:isMobile?12:16,borderRadius:"50%",overflow:"hidden",border:`3px solid ${T.acc}`,boxShadow:`0 0 40px ${T.glow}`,background:`linear-gradient(135deg,${T.s2},${T.bg})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:isMobile?"2.6rem":"3.5rem"}}>
+            {data.photo
+              ? <img src={data.photo} alt={data.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} />
+              : "🧑‍💻"}
+          </div>
         </div>
-        <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"clamp(2.3rem,5vw,4rem)",fontWeight:900,lineHeight:1.1,margin:"0 0 .5rem",animation:"fadeUp .6s .3s both"}}>
+        <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"clamp(2rem,8vw,4rem)",fontWeight:900,lineHeight:1.1,margin:"0 0 .5rem",animation:"fadeUp .6s .3s both",padding:isMobile?"0 .5rem":0}}>
           <ScrambleText key={"greet"} text="Hi, I'm " speed={26} delay={0.1} style={{fontFamily:"'Syne',sans-serif",fontWeight:900,fontSize:"inherit",color:T.txt}} />
           <ScrambleText key={data.name} text={data.name} speed={26} delay={0.3} style={{...gradTxt,fontFamily:"'Syne',sans-serif",fontWeight:900,fontSize:"inherit"}} />
         </h1>
-        <div style={{fontSize:"1.02rem",color:T.acc3,fontWeight:500,marginBottom:"1rem",minHeight:"1.5em",animation:"fadeUp .6s .4s both"}}>
+        <div style={{fontSize:isMobile?".88rem":"1.02rem",color:T.acc3,fontWeight:500,marginBottom:"1rem",minHeight:"1.5em",animation:"fadeUp .6s .4s both",padding:isMobile?"0 1rem":0}}>
           <span id="typed"/><span style={{animation:"blink .8s infinite",display:"inline-block"}}>|</span>
         </div>
-        <p style={{maxWidth:560,color:T.mut,fontSize:".97rem",margin:"0 auto 2rem",lineHeight:1.75,animation:"fadeUp .6s .5s both"}}>{data.desc}</p>
-        <div style={{display:"flex",gap:"1rem",justifyContent:"center",flexWrap:"wrap",animation:"fadeUp .6s .6s both"}}>
+        <p style={{maxWidth:560,color:T.mut,fontSize:isMobile?".88rem":".97rem",margin:"0 auto 2rem",lineHeight:1.75,animation:"fadeUp .6s .5s both",padding:isMobile?"0 1.2rem":0}}>{data.desc}</p>
+        <div style={{display:"flex",gap:isMobile?".7rem":"1rem",justifyContent:"center",flexWrap:"wrap",animation:"fadeUp .6s .6s both",width:isMobile?"100%":"auto",padding:isMobile?"0 1.2rem":0}}>
           <a href={data.resumeUrl||"#"} target={data.resumeUrl?"_blank":"_self"} rel="noreferrer" onClick={!data.resumeUrl?e=>{e.preventDefault();alert("No resume yet. Use Admin → Resume tab.");}:undefined}
-            style={{background:`linear-gradient(135deg,${T.acc},${T.acc2})`,color:"#fff",borderRadius:12,padding:".8rem 2rem",fontWeight:700,textDecoration:"none",fontFamily:"'Space Grotesk',sans-serif",fontSize:".95rem",display:"inline-flex",alignItems:"center",gap:".4rem"}}>
+            style={{background:`linear-gradient(135deg,${T.acc},${T.acc2})`,color:"#fff",borderRadius:12,padding:isMobile?".75rem 1.4rem":".8rem 2rem",fontWeight:700,textDecoration:"none",fontFamily:"'Space Grotesk',sans-serif",fontSize:isMobile?".85rem":".95rem",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:".4rem",flex:isMobile?"1 1 auto":"none",minWidth:isMobile?140:"auto"}}>
             ⬇ Download Resume
           </a>
-          <button onClick={()=>go("contact")} style={{background:"transparent",color:T.txt,border:`1px solid ${T.brd}`,borderRadius:12,padding:".8rem 2rem",fontWeight:700,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",fontSize:".95rem"}}>✉ Hire / Contact Me</button>
+          <button onClick={()=>go("contact")} style={{background:"transparent",color:T.txt,border:`1px solid ${T.brd}`,borderRadius:12,padding:isMobile?".75rem 1.4rem":".8rem 2rem",fontWeight:700,cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",fontSize:isMobile?".85rem":".95rem",flex:isMobile?"1 1 auto":"none",minWidth:isMobile?140:"auto"}}>✉ Hire / Contact Me</button>
         </div>
         <div style={{display:"flex",gap:".8rem",justifyContent:"center",marginTop:"1.8rem",animation:"fadeUp .6s .7s both"}}>
           {data.socials.map((s,i)=>(
             <a key={i} href={s.url} target="_blank" rel="noreferrer" title={s.label}
-              style={{width:42,height:42,borderRadius:"50%",background:T.s1,border:`1px solid ${T.brd}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.1rem",textDecoration:"none",transition:"border-color .2s,transform .2s"}}
+              style={{width:isMobile?38:42,height:isMobile?38:42,borderRadius:"50%",background:T.s1,border:`1px solid ${T.brd}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:isMobile?"1rem":"1.1rem",textDecoration:"none",transition:"border-color .2s,transform .2s"}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=T.acc;e.currentTarget.style.transform="translateY(-3px)";}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.brd;e.currentTarget.style.transform="";}}>
               {s.icon}
             </a>
           ))}
         </div>
-        <div style={{display:"flex",gap:"1.1rem",justifyContent:"center",marginTop:"2.8rem",flexWrap:"wrap",animation:"fadeUp .6s .8s both"}}>
+        <div style={{display:isMobile?"grid":"flex",gridTemplateColumns:isMobile?"repeat(2,1fr)":undefined,gap:isMobile?".8rem":"1.1rem",justifyContent:"center",marginTop:"2.6rem",flexWrap:"wrap",animation:"fadeUp .6s .8s both",width:isMobile?"100%":"auto",padding:isMobile?"0 1.2rem":0,maxWidth:isMobile?340:"none",marginLeft:isMobile?"auto":0,marginRight:isMobile?"auto":0}}>
           {data.stats.map((s,i)=>(
-            <div key={i} style={card({padding:"1rem 1.5rem",textAlign:"center",minWidth:110})} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.acc;e.currentTarget.style.transform="translateY(-4px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.brd;e.currentTarget.style.transform="";}}>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:"1.85rem",fontWeight:900,...gradTxt}}>{s.num}</div>
-              <div style={{fontSize:".72rem",color:T.mut,marginTop:".15rem"}}>{s.label}</div>
+            <div key={i} style={card({padding:isMobile?".85rem 1rem":"1rem 1.5rem",textAlign:"center",minWidth:isMobile?"auto":110})} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.acc;e.currentTarget.style.transform="translateY(-4px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.brd;e.currentTarget.style.transform="";}}>
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?"1.5rem":"1.85rem",fontWeight:900,...gradTxt}}>{s.num}</div>
+              <div style={{fontSize:isMobile?".68rem":".72rem",color:T.mut,marginTop:".15rem"}}>{s.label}</div>
             </div>
           ))}
         </div>
-        <div onClick={()=>go("about")} style={{position:"absolute",bottom:"2.2rem",left:"50%",animation:"sBounce 2s infinite",color:T.mut,fontSize:"1.3rem",cursor:"pointer"}}>↓</div>
+        {!isMobile && <div onClick={()=>go("about")} style={{position:"absolute",bottom:"2.2rem",left:"50%",animation:"sBounce 2s infinite",color:T.mut,fontSize:"1.3rem",cursor:"pointer"}}>↓</div>}
       </section>
 
       {/* ── ABOUT ── */}
-      <section id="about" style={{padding:"6.5rem 0",position:"relative",zIndex:1}}>
-        <div style={{maxWidth:1100,margin:"0 auto",padding:"0 2rem"}}>
+      <section id="about" style={{padding:isMobile?"4rem 0":"6.5rem 0",position:"relative",zIndex:1}}>
+        <div style={{maxWidth:1100,margin:"0 auto",padding:isMobile?"0 1.2rem":"0 2rem"}}>
           <Reveal><SH eye="Who I Am" title="About" hi="Me" /></Reveal>
-          <Reveal style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3.5rem",alignItems:"start"}}>
+          <Reveal style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:isMobile?"2rem":"3.5rem",alignItems:"start"}}>
             <div>
-              <p style={{color:T.mut,lineHeight:1.8,marginBottom:"1.4rem",fontSize:".96rem"}}>{data.about}</p>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:".75rem"}}>
+              <p style={{color:T.mut,lineHeight:1.8,marginBottom:"1.4rem",fontSize:isMobile?".9rem":".96rem"}}>{data.about}</p>
+              <div style={{display:"grid",gridTemplateColumns:isSmall?"1fr":"1fr 1fr",gap:".75rem"}}>
                 {data.infoCards.map((c,i)=>(
                   <div key={i} style={card({padding:".8rem 1rem"})} onMouseEnter={e=>e.currentTarget.style.borderColor=T.acc} onMouseLeave={e=>e.currentTarget.style.borderColor=T.brd}>
                     <div style={{fontSize:".67rem",color:T.mut,textTransform:"uppercase",letterSpacing:".07em"}}>{c.label}</div>
@@ -1389,7 +1523,7 @@ export default function App() {
                 ))}
               </div>
             </div>
-            <div style={card({padding:"2rem"})}>
+            <div style={card({padding:isMobile?"1.4rem":"2rem"})}>
               <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:"1.25rem",fontWeight:800,marginBottom:"1rem",...gradTxt}}>Career Objective</h3>
               <p style={{color:T.mut,fontSize:".93rem",lineHeight:1.8}}>{data.goal}</p>
             </div>
@@ -1398,10 +1532,10 @@ export default function App() {
       </section>
 
       {/* ── SKILLS ── */}
-      <section id="skills" style={{padding:"6.5rem 0",background:T.s1,position:"relative",zIndex:1}}>
-        <div style={{maxWidth:1100,margin:"0 auto",padding:"0 2rem"}}>
+      <section id="skills" style={{padding:isMobile?"4rem 0":"6.5rem 0",background:T.s1,position:"relative",zIndex:1}}>
+        <div style={{maxWidth:1100,margin:"0 auto",padding:isMobile?"0 1.2rem":"0 2rem"}}>
           <Reveal><SH eye="What I Know" title="Technical" hi="Skills" /></Reveal>
-          <Reveal style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:"1.4rem"}}>
+          <Reveal style={{display:"grid",gridTemplateColumns:isSmall?"1fr":"repeat(auto-fill,minmax(230px,1fr))",gap:"1.4rem"}}>
             {data.skills.map((s,i)=>(
               <div key={i} style={card()} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.acc;e.currentTarget.style.transform="translateY(-5px)";e.currentTarget.style.boxShadow=`0 12px 30px ${T.glow}`;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.brd;e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
                 <div style={{fontSize:"2rem",marginBottom:".6rem"}}>{s.icon}</div>
@@ -1420,10 +1554,10 @@ export default function App() {
       </section>
 
       {/* ── CERTIFICATIONS ── */}
-      <section id="certifications" style={{padding:"6.5rem 0",background:T.s1,position:"relative",zIndex:1}}>
-        <div style={{maxWidth:1100,margin:"0 auto",padding:"0 2rem"}}>
+      <section id="certifications" style={{padding:isMobile?"4rem 0":"6.5rem 0",background:T.s1,position:"relative",zIndex:1}}>
+        <div style={{maxWidth:1100,margin:"0 auto",padding:isMobile?"0 1.2rem":"0 2rem"}}>
           <Reveal><SH eye="Achievements" title="My" hi="Certifications" /></Reveal>
-          <Reveal style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:"1.4rem"}}>
+          <Reveal style={{display:"grid",gridTemplateColumns:isSmall?"1fr":"repeat(auto-fill,minmax(260px,1fr))",gap:"1.4rem"}}>
             {data.certs.map((c,i)=>(
               <div key={i} style={{background:T.bg,border:`1px solid ${T.brd}`,borderRadius:14,padding:"1.4rem",position:"relative",overflow:"hidden",transition:"border-color .2s,transform .2s"}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=T.acc;e.currentTarget.style.transform="translateY(-4px)";e.currentTarget.querySelector(".cside").style.transform="scaleY(1)";}}
@@ -1440,15 +1574,15 @@ export default function App() {
       </section>
 
       {/* ── EXPERIENCE ── */}
-      <section id="experience" style={{padding:"6.5rem 0",position:"relative",zIndex:1}}>
-        <div style={{maxWidth:800,margin:"0 auto",padding:"0 2rem"}}>
+      <section id="experience" style={{padding:isMobile?"4rem 0":"6.5rem 0",position:"relative",zIndex:1}}>
+        <div style={{maxWidth:800,margin:"0 auto",padding:isMobile?"0 1.2rem":"0 2rem"}}>
           <Reveal><SH eye="Work History" title="Work" hi="Experience" /></Reveal>
-          <Reveal style={{position:"relative",paddingLeft:"2.1rem"}}>
+          <Reveal style={{position:"relative",paddingLeft:isMobile?"1.5rem":"2.1rem"}}>
             <div style={{position:"absolute",left:6,top:0,bottom:0,width:2,background:`linear-gradient(to bottom,${T.acc},transparent)`}}/>
             {data.experience.length
               ? data.experience.map((e,i)=>(
                 <div key={i} style={{position:"relative",marginBottom:"2.2rem"}}>
-                  <div style={{position:"absolute",left:"-1.85rem",top:8,width:13,height:13,borderRadius:"50%",background:T.acc,border:`3px solid ${T.bg}`,boxShadow:`0 0 12px ${T.glow}`}}/>
+                  <div style={{position:"absolute",left:isMobile?"-1.35rem":"-1.85rem",top:8,width:13,height:13,borderRadius:"50%",background:T.acc,border:`3px solid ${T.bg}`,boxShadow:`0 0 12px ${T.glow}`}}/>
                   <div style={card()} onMouseEnter={el=>el.currentTarget.style.borderColor=T.acc} onMouseLeave={el=>el.currentTarget.style.borderColor=T.brd}>
                     <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:"1.02rem"}}>{e.role}</div>
                     <div style={{color:T.acc2,fontSize:".87rem",margin:".2rem 0"}}>{e.company} · {e.type}</div>
@@ -1463,14 +1597,14 @@ export default function App() {
       </section>
 
       {/* ── EDUCATION ── */}
-      <section id="education" style={{padding:"6.5rem 0",background:T.s1,position:"relative",zIndex:1}}>
-        <div style={{maxWidth:800,margin:"0 auto",padding:"0 2rem"}}>
+      <section id="education" style={{padding:isMobile?"4rem 0":"6.5rem 0",background:T.s1,position:"relative",zIndex:1}}>
+        <div style={{maxWidth:800,margin:"0 auto",padding:isMobile?"0 1.2rem":"0 2rem"}}>
           <Reveal><SH eye="Academic Journey" title="My" hi="Education" /></Reveal>
-          <Reveal style={{position:"relative",paddingLeft:"2.1rem"}}>
+          <Reveal style={{position:"relative",paddingLeft:isMobile?"1.5rem":"2.1rem"}}>
             <div style={{position:"absolute",left:6,top:0,bottom:0,width:2,background:`linear-gradient(to bottom,${T.acc},transparent)`}}/>
             {data.education.map((e,i)=>(
               <div key={i} style={{position:"relative",marginBottom:"2.2rem"}}>
-                <div style={{position:"absolute",left:"-1.85rem",top:8,width:13,height:13,borderRadius:"50%",background:T.acc,border:`3px solid ${T.s1}`,boxShadow:`0 0 12px ${T.glow}`}}/>
+                <div style={{position:"absolute",left:isMobile?"-1.35rem":"-1.85rem",top:8,width:13,height:13,borderRadius:"50%",background:T.acc,border:`3px solid ${T.s1}`,boxShadow:`0 0 12px ${T.glow}`}}/>
                 <div style={card()} onMouseEnter={el=>el.currentTarget.style.borderColor=T.acc} onMouseLeave={el=>el.currentTarget.style.borderColor=T.brd}>
                   <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:"1.02rem"}}>{e.inst}</div>
                   <div style={{color:T.acc2,fontSize:".87rem",margin:".2rem 0"}}>{e.deg}</div>
@@ -1484,21 +1618,21 @@ export default function App() {
       </section>
 
       {/* ── CONTACT ── */}
-      <section id="contact" style={{padding:"6.5rem 0",position:"relative",zIndex:1}}>
-        <div style={{maxWidth:1100,margin:"0 auto",padding:"0 2rem"}}>
+      <section id="contact" style={{padding:isMobile?"4rem 0":"6.5rem 0",position:"relative",zIndex:1}}>
+        <div style={{maxWidth:1100,margin:"0 auto",padding:isMobile?"0 1.2rem":"0 2rem"}}>
           <Reveal><SH eye="Get In Touch" title="Let's" hi="Connect" /></Reveal>
-          <Reveal style={{display:"grid",gridTemplateColumns:"1fr 1.5fr",gap:"4rem",alignItems:"start"}}>
+          <Reveal style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1.5fr",gap:isMobile?"2rem":"4rem",alignItems:"start"}}>
             <ul style={{listStyle:"none",padding:0,margin:0}}>
               {data.contact.map((c,i)=>(
                 <li key={i} style={{display:"flex",alignItems:"center",gap:"1rem",background:T.s1,border:`1px solid ${T.brd}`,borderRadius:12,padding:"1rem 1.2rem",marginBottom:".9rem",transition:"border-color .2s,transform .2s"}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=T.acc;e.currentTarget.style.transform="translateX(4px)";}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=T.brd;e.currentTarget.style.transform="";}}>
                   <span style={{fontSize:"1.3rem"}}>{c.icon}</span>
-                  <span style={{fontSize:".88rem"}}><strong>{c.label}:</strong> {c.val}</span>
+                  <span style={{fontSize:".88rem",wordBreak:"break-word"}}><strong>{c.label}:</strong> {c.val}</span>
                 </li>
               ))}
             </ul>
-            <div style={card({padding:"2rem"})}>
+            <div style={card({padding:isMobile?"1.4rem":"2rem"})}>
               <h3 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,marginBottom:"1.4rem",fontSize:"1.1rem"}}>Send a Message</h3>
               {["Mobile Number","Subject"].map(l=>(
                 <div key={l} style={{marginBottom:"1rem"}}>
